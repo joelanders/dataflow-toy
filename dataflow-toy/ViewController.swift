@@ -1,10 +1,3 @@
-//
-//  ViewController.swift
-//  dataflow-toy
-//
-//  Created by Joe Landers on 09.06.21.
-//
-
 import Cocoa
 
 extension CGPoint {
@@ -14,8 +7,25 @@ extension CGPoint {
     }
 }
 
+class Connector: NSView {
+    weak var rectangle: Rectangle?
+    var path: NSBezierPath = NSBezierPath()
+    override func viewDidMoveToSuperview() {
+        NSLog("connector moved to superview")
+    }
+    
+    override func draw(_ dirtyRect: CGRect) {
+        super.draw(dirtyRect)
+
+        NSColor.green.set()
+        path.lineWidth = 5.0
+        path.appendOval(in: CGRect(x:5, y:5, width: 10, height:10))
+        path.stroke()
+    }
+}
+
 class DragBar: NSView {
-    weak var parentView: Rectangle?
+    weak var rectangle: Rectangle?
     override func viewDidMoveToSuperview() {
         NSLog("dragbar moved to superview")
         addGestureRecognizer(NSPanGestureRecognizer(target: self, action: #selector(pan)))
@@ -29,11 +39,8 @@ class DragBar: NSView {
         NSBezierPath(rect: dirtyRect).fill()
     }
     
-    // your gesture selector
     @objc func pan(_ gesture: NSPanGestureRecognizer) {
-        //  update your view frame origin
-        superview?.frame.origin += gesture.translation(in: self)
-        // reset the gesture translation
+        rectangle?.pan(by: gesture.translation(in: self))
         gesture.setTranslation(.zero, in: self)
     }
 
@@ -43,15 +50,15 @@ class Rectangle: NSView {
     var path: NSBezierPath = NSBezierPath()
     var start: NSPoint = NSPoint()
     var dragBar: DragBar?
-    
+    var inlet: Connector?
+    var outlet: Connector?
+
     @IBInspectable var color: NSColor = .clear {
         didSet { layer?.backgroundColor = color.cgColor }
     }
-    // draw your view using the background color
     override func draw(_ dirtyRect: CGRect) {
         super.draw(dirtyRect)
 
-        //layer?.backgroundColor?.set()
         NSBezierPath(rect: dirtyRect).fill()
         NSColor.blue.set()
         path.lineJoinStyle = .round
@@ -63,7 +70,14 @@ class Rectangle: NSView {
     override func viewDidMoveToSuperview() {
         NSLog("rectangle moved to superview")
         dragBar = DragBar(frame: CGRect(x:0, y: 110, width: 80, height:10))
+        dragBar!.rectangle = self
         addSubview(dragBar!)
+
+        inlet = Connector(frame: convert(CGRect(x:-10, y:-10, width:20, height:20), to: superview))
+        superview?.addSubview(inlet!)
+        
+        outlet = Connector(frame: convert(CGRect(x:70, y:-10, width:20, height:20), to: superview))
+        superview?.addSubview(outlet!)
     }
 
 
@@ -84,16 +98,31 @@ class Rectangle: NSView {
         path.line(to: convert(event.locationInWindow, from: nil))
         needsDisplay = true
     }
+    
+    func pan(by point: NSPoint) {
+        frame.origin += point
+        inlet?.frame.origin += point
+        outlet?.frame.origin += point
+    }
+}
+
+class Everything: NSView {
+    var rectangles: [Rectangle] = []
+    override func viewDidMoveToSuperview() {
+        let rectangle = Rectangle(frame: CGRect(x:100, y:100, width: 80, height: 120))
+        addSubview(rectangle)
+        rectangles.append(rectangle)
+    }
 }
 
 class ViewController: NSViewController {
 
-    var rectangles: [Rectangle] = []
+    var everything: Everything? = nil
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-        let rectangle = Rectangle(frame: CGRect(x:100, y:100, width: 80, height: 120))
-        self.view.addSubview(rectangle)
-        rectangles.append(rectangle)
+        everything = Everything(frame: self.view.frame)
+        self.view.addSubview(everything!)
     }
 
     override var representedObject: Any? {
