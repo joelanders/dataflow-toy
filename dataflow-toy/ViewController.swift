@@ -9,7 +9,8 @@ extension CGPoint {
 
 class Connector: NSView {
     weak var rectangle: Rectangle?
-    var path: NSBezierPath = NSBezierPath()
+    var circlePath: NSBezierPath = NSBezierPath()
+    
     override func viewDidMoveToSuperview() {
         NSLog("connector moved to superview")
     }
@@ -18,10 +19,24 @@ class Connector: NSView {
         super.draw(dirtyRect)
 
         NSColor.green.set()
-        path.lineWidth = 5.0
-        path.appendOval(in: CGRect(x:5, y:5, width: 10, height:10))
-        path.stroke()
+        circlePath.lineWidth = 5.0
+        circlePath.appendOval(in: CGRect(x:5, y:5, width: 10, height:10))
+        circlePath.stroke()
+
+        rectangle?.everything?.needsDisplay = true
     }
+    
+    override func mouseDown(with event: NSEvent) {
+        rectangle?.everything?.start = convert(convert(event.locationInWindow, from: nil), to: rectangle?.everything)
+        needsDisplay = true
+    }
+    
+    override func mouseDragged(with event: NSEvent) {
+        rectangle?.everything?.stop = convert(convert(event.locationInWindow, from: nil), to: rectangle?.everything)
+        rectangle?.everything?.drawCords()
+        needsDisplay = true
+    }
+    
 }
 
 class DragBar: NSView {
@@ -47,8 +62,7 @@ class DragBar: NSView {
 }
 
 class Rectangle: NSView {
-    var path: NSBezierPath = NSBezierPath()
-    var start: NSPoint = NSPoint()
+    weak var everything: Everything?
     var dragBar: DragBar?
     var inlet: Connector?
     var outlet: Connector?
@@ -60,11 +74,7 @@ class Rectangle: NSView {
         super.draw(dirtyRect)
 
         NSBezierPath(rect: dirtyRect).fill()
-        NSColor.blue.set()
-        path.lineJoinStyle = .round
-        path.lineCapStyle = .round
-        path.lineWidth = 5.0
-        path.stroke()
+
     }
     
     override func viewDidMoveToSuperview() {
@@ -74,44 +84,60 @@ class Rectangle: NSView {
         addSubview(dragBar!)
 
         inlet = Connector(frame: convert(CGRect(x:-10, y:-10, width:20, height:20), to: superview))
+        inlet!.rectangle = self
         superview?.addSubview(inlet!)
         
         outlet = Connector(frame: convert(CGRect(x:70, y:-10, width:20, height:20), to: superview))
+        outlet!.rectangle = self
         superview?.addSubview(outlet!)
     }
 
 
-    
-    override func mouseDown(with event: NSEvent) {
-        path.move(to: convert(event.locationInWindow, from: nil))
-        start = convert(event.locationInWindow, from: nil)
-        //NSLog("start: \(start)")
-        // path.line(to: convert(event.locationInWindow, from: nil))
-        needsDisplay = true
-    }
-    
-    override func mouseDragged(with event: NSEvent) {
-        path.removeAllPoints()
-        path.move(to: convert(start, from: nil))
-        //NSLog("start2: \(start)")
-
-        path.line(to: convert(event.locationInWindow, from: nil))
-        needsDisplay = true
-    }
-    
     func pan(by point: NSPoint) {
         frame.origin += point
         inlet?.frame.origin += point
         outlet?.frame.origin += point
+        everything?.start += point
+        //everything?.stop += point
+        everything?.drawCords()
     }
 }
 
 class Everything: NSView {
     var rectangles: [Rectangle] = []
+    var path: CGMutablePath = CGMutablePath()
+    var start: NSPoint = NSPoint()
+    var stop: NSPoint = NSPoint()
+    let curvesLayer = CALayer()
+    var shapeLayer = CAShapeLayer()
+    
     override func viewDidMoveToSuperview() {
         let rectangle = Rectangle(frame: CGRect(x:100, y:100, width: 80, height: 120))
+        rectangle.everything = self
         addSubview(rectangle)
         rectangles.append(rectangle)
+        curvesLayer.frame = self.frame
+        curvesLayer.drawsAsynchronously = true
+        layer!.addSublayer(curvesLayer)
+    }
+    
+    func drawCords() {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0)
+        
+        path = CGMutablePath()
+        path.move(to: start)
+        path.addLine(to: stop)
+        
+        shapeLayer.frame = self.frame
+        shapeLayer.strokeColor = NSColor.blue.cgColor
+        shapeLayer.lineWidth = 5.0
+        shapeLayer.path = path
+        
+        curvesLayer.addSublayer(shapeLayer)
+        
+        CATransaction.commit()
+
     }
 }
 
@@ -122,6 +148,7 @@ class ViewController: NSViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         everything = Everything(frame: self.view.frame)
+        everything!.wantsLayer = true
         self.view.addSubview(everything!)
     }
 
