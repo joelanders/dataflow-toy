@@ -8,12 +8,7 @@ extension CGPoint {
 }
 
 
-class Vertex: NSView, NSDraggingSource {
-    
-    func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        return .link
-    }
-    
+class Vertex: NSView {
     weak var rectangle: Rectangle?
     var circlePath: NSBezierPath = NSBezierPath()
     
@@ -24,45 +19,35 @@ class Vertex: NSView, NSDraggingSource {
     override func draw(_ dirtyRect: CGRect) {
         super.draw(dirtyRect)
 
-        NSColor.green.set()
+        NSColor.lightGray.set()
         circlePath.lineWidth = 5.0
-        circlePath.appendOval(in: CGRect(x:5, y:5, width: 10, height:10))
+        circlePath.appendOval(in: CGRect(x:2.5, y:2.5, width: 5, height:5))
         circlePath.stroke()
 
         rectangle?.everything?.needsDisplay = true
     }
     
     override func mouseDown(with event: NSEvent) {
-        beginDraggingSession(with: [], event: event, source: self)
-    }
-    
-    func draggingSession(_ session: NSDraggingSession, willBeginAt: NSPoint) {
-        rectangle?.everything?.unfinishedStart = convert(convert(willBeginAt, from: nil), to: rectangle?.everything)
-        NSLog("Vertex draggingSession willBeginAt \(ObjectIdentifier(self)) \(willBeginAt)")
+        rectangle?.everything?.unfinishedStart = convert(convert(event.locationInWindow, from: nil), to: rectangle?.everything)
+        NSLog("Vertex mouseDown \(ObjectIdentifier(self))")
         rectangle?.everything?.unfinishedStartVertex = self
         needsDisplay = true
     }
     
-    func draggingSession(_ session: NSDraggingSession, endedAt: NSPoint, operation: NSDragOperation) {
-        NSLog("Vertex draggingSession endedAt   \(ObjectIdentifier(self)) \(endedAt)")
-    }
-    
-    func draggingSession(_ session: NSDraggingSession, movedTo: NSPoint) {
-        NSLog("Vertex draggingSession movedTo   \(ObjectIdentifier(self)) \(movedTo)")
-        rectangle?.everything?.unfinishedStop = convert(convert(movedTo, from: nil), to: rectangle?.everything)
+    override func mouseDragged(with event: NSEvent) {
+        //NSLog("Vertex mouseDrageed   \(ObjectIdentifier(self))")
+        rectangle?.everything?.unfinishedStop = convert(convert(event.locationInWindow, from: nil), to: rectangle?.everything)
         rectangle?.everything?.drawUnfinishedEdge()
         needsDisplay = true
     }
     
-    
-    
-    override func draggingEntered(_ draggingInfo: NSDraggingInfo) -> NSDragOperation {
-        NSLog("Vertex draggingEntered   \(ObjectIdentifier(draggingInfo.draggingSource as! Vertex)) -> \(ObjectIdentifier(self))")
-        return .link
+    override func mouseUp(with event: NSEvent) {
+        NSLog("Vertex mouseUp   \(ObjectIdentifier(self))")
+        return super.mouseUp(with: event)
     }
     
-    override func draggingEnded(_ draggingInfo: NSDraggingInfo) {
-        NSLog("Vertex draggingEnded   \(ObjectIdentifier(draggingInfo.draggingSource as! Vertex)) -> \(ObjectIdentifier(self))")
+    func makeEdge(with event: NSEvent) {
+        NSLog("Vertex makeEdge   \(ObjectIdentifier(self))")
         let start = rectangle?.everything!.unfinishedStartVertex
         if start != nil {
             let vertexPair = VertexPair(start: start!, finish: self)
@@ -71,9 +56,10 @@ class Vertex: NSView, NSDraggingSource {
             needsDisplay = true
         }
         
-        //rectangle?.everything!.unfinishedStart = nil
-        //rectangle?.everything!.unfinishedStop = nil
-        //rectangle?.everything!.unfinishedStartVertex = nil
+        rectangle?.everything!.unfinishedStart = nil
+        rectangle?.everything!.unfinishedStop = nil
+        rectangle?.everything!.unfinishedStartVertex = nil
+        rectangle?.everything!.drawUnfinishedEdge()
     }
     
 }
@@ -98,7 +84,7 @@ class DragBar: NSView {
         super.draw(dirtyRect)
 
         layer?.backgroundColor = NSColor.red.cgColor
-        NSColor.red.set()
+        NSColor.lightGray.set()
         NSBezierPath(rect: dirtyRect).fill()
     }
     
@@ -112,8 +98,8 @@ class DragBar: NSView {
 class Rectangle: NSView {
     weak var everything: Everything?
     var dragBar: DragBar?
-    var inlet: Vertex?
-    var outlet: Vertex?
+    var inlets: [Vertex] = []
+    var outlets: [Vertex] = []
     
     override func mouseDown(with event: NSEvent) {
         NSLog("Rectangle mouseDown \(ObjectIdentifier(self)) \(event.locationInWindow)")
@@ -140,25 +126,37 @@ class Rectangle: NSView {
         dragBar!.rectangle = self
         addSubview(dragBar!)
 
-        inlet = Vertex(frame: convert(CGRect(x:-10, y:-10, width:20, height:20), to: superview))
-        inlet!.rectangle = self
-        superview?.addSubview(inlet!)
+        for i in 0...3 {
+            let inlet = Vertex(frame: convert(CGRect(x:-5, y:-5 + 30*i, width:10, height:10), to: superview))
+            everything?.vertexes.append(inlet)
+            self.inlets.append(inlet)
+            inlet.rectangle = self
+            superview?.addSubview(inlet)
+        }
         
-        outlet = Vertex(frame: convert(CGRect(x:70, y:-10, width:20, height:20), to: superview))
-        outlet!.rectangle = self
-        superview?.addSubview(outlet!)
+        for i in 0...3 {
+            let outlet = Vertex(frame: convert(CGRect(x:75, y:-5 + 30*i, width:10, height:10), to: superview))
+            everything?.vertexes.append(outlet)
+            self.outlets.append(outlet)
+            outlet.rectangle = self
+            superview?.addSubview(outlet)
+        }
     }
 
 
     func pan(by point: NSPoint) {
         frame.origin += point
-        inlet?.frame.origin += point
-        outlet?.frame.origin += point
+        for inlet in inlets {
+            inlet.frame.origin += point
+        }
+        for outlet in outlets {
+            outlet.frame.origin += point
+        }
         if everything?.unfinishedStart != nil {
             everything?.unfinishedStart! += point
         }
         //everything?.stop += point
-        //everything?.drawUnfinishedEdge()
+        everything?.drawFinishedEdges()
     }
 }
 
@@ -169,6 +167,7 @@ struct VertexPair: Hashable {
 
 class Everything: NSView {
     var rectangles: [Rectangle] = []
+    var vertexes: [Vertex] = []
     let curvesLayer = CALayer()
     
     var unfinishedPath: CGMutablePath? = CGMutablePath()
@@ -187,11 +186,16 @@ class Everything: NSView {
     
     override func mouseUp(with event: NSEvent) {
         NSLog("Everything mouseUp   \(ObjectIdentifier(self)) \(event.locationInWindow)")
+        let target = hitTest(event.locationInWindow)
+        NSLog("hitTest: \(target)")
+        if let targetVertex = target as? Vertex {
+            targetVertex.makeEdge(with: event)
+        }
     }
 
     override func viewDidMoveToSuperview() {
-        for i in 1...2 {
-            let rectangle = Rectangle(frame: CGRect(x:100*i, y:100, width: 80, height: 120))
+        for i in 0...1 {
+            let rectangle = Rectangle(frame: CGRect(x:100 + 200*i, y:100, width: 80, height: 120))
             rectangle.everything = self
             addSubview(rectangle)
             rectangles.append(rectangle)
@@ -199,26 +203,23 @@ class Everything: NSView {
         
         curvesLayer.frame = self.frame
         curvesLayer.drawsAsynchronously = true
+        curvesLayer.zPosition = 100
         layer!.addSublayer(curvesLayer)
     }
     
     func drawUnfinishedEdge() {
-        if unfinishedStart == nil || unfinishedStop == nil {
-            NSLog("ONE OR OTHER IS NIL")
-            return
-        }
-        NSLog("BOTH NOT NIL: \(unfinishedStart) \(unfinishedStop)")
         CATransaction.begin()
         CATransaction.setAnimationDuration(0)
         
         unfinishedPath = CGMutablePath()
-        unfinishedPath!.move(to: unfinishedStart!)
-        unfinishedPath!.addLine(to: unfinishedStop!)
+        if unfinishedStart != nil && unfinishedStop != nil {
+            unfinishedPath!.move(to: unfinishedStart!)
+            unfinishedPath!.addLine(to: unfinishedStop!)
+        }
         
-        unfinishedEdgeShapeLayer = CAShapeLayer()
         unfinishedEdgeShapeLayer!.frame = self.frame
         unfinishedEdgeShapeLayer!.strokeColor = NSColor.blue.cgColor
-        unfinishedEdgeShapeLayer!.lineWidth = 5.0
+        unfinishedEdgeShapeLayer!.lineWidth = 2.0
         unfinishedEdgeShapeLayer!.path = unfinishedPath
         
         curvesLayer.addSublayer(unfinishedEdgeShapeLayer!)
@@ -232,8 +233,8 @@ class Everything: NSView {
         
         for vertexPair in vertexPairs {
             let path = CGMutablePath()
-            path.move(to: vertexPair.start.frame.origin)
-            path.addLine(to: vertexPair.finish.frame.origin)
+            path.move(to: CGPoint(x: NSMidX(vertexPair.start.frame), y: NSMidY(vertexPair.start.frame)))
+            path.addLine(to: CGPoint(x: NSMidX(vertexPair.finish.frame), y: NSMidY(vertexPair.finish.frame)))
             
             if vertexPairsToShapeLayers[vertexPair] == nil {
                 vertexPairsToShapeLayers[vertexPair] = CAShapeLayer()
@@ -241,8 +242,8 @@ class Everything: NSView {
             
             let shapeLayer = vertexPairsToShapeLayers[vertexPair]!
             shapeLayer.frame = self.frame
-            shapeLayer.strokeColor = NSColor.blue.cgColor
-            shapeLayer.lineWidth = 5.0
+            shapeLayer.strokeColor = NSColor.darkGray.cgColor
+            shapeLayer.lineWidth = 2.0
             shapeLayer.path = path
             
             curvesLayer.addSublayer(shapeLayer)
