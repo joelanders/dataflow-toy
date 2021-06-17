@@ -7,7 +7,6 @@ extension CGPoint {
     }
 }
 
-
 class Vertex: NSView {
     weak var rectangle: Rectangle?
     var circlePath: NSBezierPath = NSBezierPath()
@@ -180,6 +179,9 @@ class Everything: NSView {
     var vertexPairs: [VertexPair] = []
     var vertexPairsToShapeLayers : [(VertexPair): CAShapeLayer] = [:]
     
+    var guidePathsLayer = CALayer()
+    var vertexesToGuidePathShapeLayers: [Vertex: CAShapeLayer] = [:]
+    
     override func mouseDown(with event: NSEvent) {
         NSLog("Everything mouseDown \(ObjectIdentifier(self)) \(event.locationInWindow)")
     }
@@ -205,9 +207,44 @@ class Everything: NSView {
         curvesLayer.drawsAsynchronously = true
         curvesLayer.zPosition = 100
         layer!.addSublayer(curvesLayer)
+        
+        guidePathsLayer.frame = self.frame
+        guidePathsLayer.drawsAsynchronously = true
+        guidePathsLayer.zPosition = 99
+        layer!.addSublayer(guidePathsLayer)
+        // drawGuidePaths()
+        needsDisplay = true
+    }
+    
+    func drawGuidePaths() {
+        NSLog("drawGuidePaths()")
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0)
+        
+        for vertex in vertexes {
+            let guidePath = CGMutablePath()
+            guidePath.addEllipse(in: NSRect(x: vertex.frame.minX - vertex.frame.width * 1.5, y: vertex.frame.minY + vertex.frame.height * 0.5, width: vertex.frame.width*4, height: vertex.frame.height*4))
+            
+            if vertexesToGuidePathShapeLayers[vertex] == nil {
+                vertexesToGuidePathShapeLayers[vertex] = CAShapeLayer()
+            }
+            let guidePathShapeLayer = vertexesToGuidePathShapeLayers[vertex]!
+            guidePathShapeLayer.frame = self.frame
+            guidePathShapeLayer.strokeColor = NSColor.red.cgColor
+            guidePathShapeLayer.fillRule = .evenOdd
+            guidePathShapeLayer.opacity = 0.5
+            guidePathShapeLayer.lineWidth = 2.0
+            guidePathShapeLayer.path = guidePath
+            
+            guidePathsLayer.addSublayer(guidePathShapeLayer)
+        }
+        CATransaction.commit()
     }
     
     func drawUnfinishedEdge() {
+        let context = NSGraphicsContext.current?.cgContext
+        context?.setLineCap(.round)
+        
         CATransaction.begin()
         CATransaction.setAnimationDuration(0)
         
