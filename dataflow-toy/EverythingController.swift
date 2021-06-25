@@ -49,47 +49,10 @@ class Vertex: NSView {
 
 }
 
-class DragBar: NSView {
-    weak var rectangle: Rectangle?
-    weak var everything: Everything?
-
-    override func mouseDown(with event: NSEvent) {
-        NSLog("DragBar mouseDown \(ObjectIdentifier(self)) \(event.locationInWindow)")
-    }
-    
-    override func mouseUp(with event: NSEvent) {
-        NSLog("DragBar mouseUp   \(ObjectIdentifier(self)) \(event.locationInWindow)")
-    }
-    
-    override func viewDidMoveToSuperview() {
-        addGestureRecognizer(NSPanGestureRecognizer(target: self, action: #selector(pan)))
-
-    }
-    override func draw(_ dirtyRect: CGRect) {
-        super.draw(dirtyRect)
-
-        layer?.backgroundColor = NSColor.red.cgColor
-        NSColor.lightGray.set()
-        NSBezierPath(rect: dirtyRect).fill()
-    }
-    
-    @objc func pan(_ gesture: NSPanGestureRecognizer) {
-        if everything!.selectedRectangles.count > 0 {
-            for rectangle in everything!.selectedRectangles {
-                rectangle.pan(by: gesture.translation(in: self))
-            }
-        } else {
-            rectangle!.pan(by: gesture.translation(in: self))
-        }
-        gesture.setTranslation(.zero, in: self)
-    }
-
-}
 
 class Rectangle: NSView {
     weak var everything: Everything?
     var selected = false
-    var dragBar: DragBar?
     var inlets: [Vertex] = []
     var outlets: [Vertex] = []
     
@@ -117,10 +80,7 @@ class Rectangle: NSView {
     }
     
     override func viewDidMoveToSuperview() {
-        dragBar = DragBar(frame: CGRect(x:0, y: 110, width: 80, height:10))
-        dragBar!.everything = everything
-        dragBar!.rectangle = self
-        addSubview(dragBar!)
+        addGestureRecognizer(NSPanGestureRecognizer(target: self, action: #selector(pan)))
 
         for i in 0...3 {
             let inlet = Vertex(frame: convert(CGRect(x:-5, y:-5 + 30*i, width:10, height:10), to: superview))
@@ -138,18 +98,29 @@ class Rectangle: NSView {
             superview?.addSubview(outlet)
         }
     }
-
-
-    func pan(by point: NSPoint) {
-        frame.origin += point
-        for inlet in inlets {
-            inlet.frame.origin += point
+    
+    @objc func pan(_ gesture: NSPanGestureRecognizer) {
+        let point = gesture.translation(in: self)
+        if everything!.selectedRectangles.count > 0 {
+            for rectangle in everything!.selectedRectangles {
+                rectangle.frame.origin += point
+                for inlet in rectangle.inlets {
+                    inlet.frame.origin += point
+                }
+                for outlet in rectangle.outlets {
+                    outlet.frame.origin += point
+                }
+            }
+        } else {
+            frame.origin += point
+            for inlet in inlets {
+                inlet.frame.origin += point
+            }
+            for outlet in outlets {
+                outlet.frame.origin += point
+            }
         }
-        for outlet in outlets {
-            outlet.frame.origin += point
-        }
-        //everything?.stop += point
-        everything?.drawFinishedEdges()
+        gesture.setTranslation(.zero, in: self)
         everything?.drawGuidePaths()
     }
 }
@@ -265,7 +236,6 @@ class Everything: NSView {
                 vertexPair = VertexPair(start: start!, finish: targetVertex)
             }
             vertexPairs.append(vertexPair)
-            drawFinishedEdges()
             drawGuidePaths()
         }
     }
@@ -362,39 +332,6 @@ class Everything: NSView {
         
         curvesLayer.addSublayer(shapeLayer)
         return shapeLayer
-    }
-    
-    func drawFinishedEdges() {
-        CATransaction.begin()
-        CATransaction.setAnimationDuration(0)
-        /*
-        curvesLayer.sublayers = nil
-        for vertexPair in vertexPairs {
-            let shapeLayer = plotLine(CGPoint(x: NSMidX(vertexPair.start.frame), y: NSMidY(vertexPair.start.frame)),
-                     CGPoint(x: NSMidX(vertexPair.finish.frame), y: NSMidY(vertexPair.finish.frame))
-            )
-            
-            curvesLayer.addSublayer(shapeLayer)
-            /*
-            let path = CGMutablePath()
-            path.move(to: CGPoint(x: NSMidX(vertexPair.start.frame), y: NSMidY(vertexPair.start.frame)))
-            path.addLine(to: CGPoint(x: NSMidX(vertexPair.finish.frame), y: NSMidY(vertexPair.finish.frame)))
-            
-            if vertexPairsToShapeLayers[vertexPair] == nil {
-                vertexPairsToShapeLayers[vertexPair] = CAShapeLayer()
-            }
-            
-            let shapeLayer = vertexPairsToShapeLayers[vertexPair]!
-            shapeLayer.frame = self.frame
-            shapeLayer.strokeColor = NSColor.darkGray.cgColor
-            shapeLayer.lineWidth = 1.0
-            shapeLayer.path = path
-            
-            curvesLayer.addSublayer(shapeLayer)
-            */
-        }*/
-        
-        CATransaction.commit()
     }
     
     func drawGuidePaths() {
