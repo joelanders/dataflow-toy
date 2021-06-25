@@ -49,12 +49,29 @@ class Vertex: NSView {
 
 }
 
+let rectangleTypes = [
+    "gain": [
+        "name": "gain",
+        "inlets": ["input"],
+        "outlets": ["output"],
+    ],
+    "LPF": [
+        "name": "LPF",
+        "inlets": ["input", "freq", "res"],
+        "outlets": ["output"],
+    ]
+]
+
+let initialRectangles = ["gain", "gain", "LPF", "LPF"]
+
 
 class Rectangle: NSView {
     weak var everything: Everything?
+    var descriptor: [String: Any]?
     var selected = false
     var inlets: [Vertex] = []
     var outlets: [Vertex] = []
+    var labels: [NSTextField] = []
     
     override func mouseDown(with event: NSEvent) {
         NSLog("Rectangle mouseDown \(ObjectIdentifier(self)) \(event.locationInWindow)")
@@ -76,27 +93,65 @@ class Rectangle: NSView {
             NSColor.gray.set()
         }
         NSBezierPath(rect: dirtyRect).fill()
+        
+        NSColor.lightGray.set()
+        NSBezierPath(rect: CGRect(x:0, y:110, width: 80, height: 10)).fill()
 
     }
     
     override func viewDidMoveToSuperview() {
         addGestureRecognizer(NSPanGestureRecognizer(target: self, action: #selector(pan)))
 
-        for i in 0...3 {
-            let inlet = Vertex(frame: convert(CGRect(x:-5, y:-5 + 30*i, width:10, height:10), to: superview))
+        guard let descInlets = descriptor?["inlets"] as? [String] else {
+            return
+        }
+        guard let descOutlets = descriptor?["outlets"] as? [String] else {
+            return
+        }
+        for case let (i, inletName) in descInlets.enumerated() {
+            let inlet = Vertex(frame: convert(CGRect(x:-5, y:-5 + 30*(i+1), width:10, height:10), to: superview))
             everything?.vertexes.append(inlet)
             self.inlets.append(inlet)
             inlet.rectangle = self
             superview?.addSubview(inlet)
+            
+            let label = NSTextField(frame: convert(CGRect(x:5, y:-5 + 30*(i+1), width:30, height:10), to: superview))
+            label.font = .systemFont(ofSize: 8)
+            label.stringValue = inletName
+            label.isBezeled = false
+            label.isEditable = false
+            label.drawsBackground = false
+            superview?.addSubview(label)
+            labels.append(label)
         }
         
-        for i in 0...3 {
-            let outlet = Vertex(frame: convert(CGRect(x:75, y:-5 + 30*i, width:10, height:10), to: superview))
+        for case let (i, outletName) in descOutlets.enumerated() {
+            let outlet = Vertex(frame: convert(CGRect(x:75, y:-5 + 30*(i+1), width:10, height:10), to: superview))
             everything?.vertexes.append(outlet)
             self.outlets.append(outlet)
             outlet.rectangle = self
             superview?.addSubview(outlet)
+            
+            let label = NSTextField(frame: convert(CGRect(x:45, y:-5 + 30*(i+1), width:30, height:10), to: superview))
+            label.alignment = .right
+            label.font = .systemFont(ofSize: 8)
+            label.stringValue = outletName
+            label.isBezeled = false
+            label.isEditable = false
+            label.drawsBackground = false
+            superview?.addSubview(label)
+            labels.append(label)
         }
+        
+        let label = NSTextField(frame: convert(CGRect(x:25, y:110, width:30, height:10), to: superview))
+        label.alignment = .center
+        label.font = .systemFont(ofSize: 8)
+        label.stringValue = descriptor?["name"] as? String ?? ""
+        label.isBezeled = false
+        label.isEditable = false
+        label.drawsBackground = false
+        superview?.addSubview(label)
+        labels.append(label)
     }
     
     @objc func pan(_ gesture: NSPanGestureRecognizer) {
@@ -110,6 +165,9 @@ class Rectangle: NSView {
                 for outlet in rectangle.outlets {
                     outlet.frame.origin += point
                 }
+                for label in rectangle.labels {
+                    label.frame.origin += point
+                }
             }
         } else {
             frame.origin += point
@@ -118,6 +176,9 @@ class Rectangle: NSView {
             }
             for outlet in outlets {
                 outlet.frame.origin += point
+            }
+            for label in labels {
+                label.frame.origin += point
             }
         }
         gesture.setTranslation(.zero, in: self)
@@ -241,8 +302,10 @@ class Everything: NSView {
     }
 
     override func viewDidMoveToSuperview() {
-        for i in 0...3 {
+        for (i, name) in initialRectangles.enumerated() {
+            let rectangleDesc = rectangleTypes[name]
             let rectangle = Rectangle(frame: CGRect(x:50 + 120*i, y:100, width: 80, height: 120))
+            rectangle.descriptor = rectangleDesc
             rectangle.everything = self
             addSubview(rectangle)
             rectangles.append(rectangle)
