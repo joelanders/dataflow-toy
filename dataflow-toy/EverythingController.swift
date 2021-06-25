@@ -28,6 +28,10 @@ extension NSView {
     var center: CGPoint { return CGPoint(x: frame.midX, y: frame.midY) }
 }
 
+extension NSRect {
+    var center: CGPoint { return CGPoint(x: midX, y: midY) }
+}
+
 class Vertex: NSView {
     weak var rectangle: Rectangle?
     var circlePath: NSBezierPath = NSBezierPath()
@@ -146,6 +150,7 @@ class Rectangle: NSView {
         }
         //everything?.stop += point
         everything?.drawFinishedEdges()
+        everything?.drawGuidePaths()
     }
 }
 
@@ -159,6 +164,7 @@ class Everything: NSView {
     var selectedRectangles: [Rectangle] = []
     var vertexes: [Vertex] = []
     let curvesLayer = CALayer()
+    var shapeLayers : [CAShapeLayer] = []
     
     var unfinishedPath: CGMutablePath? = CGMutablePath()
     var unfinishedStart: NSPoint? = nil
@@ -252,15 +258,21 @@ class Everything: NSView {
         NSLog("Vertex makeEdge   \(ObjectIdentifier(self))")
         let start = unfinishedStartVertex
         if start != nil {
-            let vertexPair = VertexPair(start: start!, finish: targetVertex)
+            var vertexPair : VertexPair
+            if start!.center.x < targetVertex.center.x {
+                vertexPair = VertexPair(start: targetVertex, finish: start!)
+            } else {
+                vertexPair = VertexPair(start: start!, finish: targetVertex)
+            }
             vertexPairs.append(vertexPair)
             drawFinishedEdges()
+            drawGuidePaths()
         }
     }
 
     override func viewDidMoveToSuperview() {
-        for i in 0...1 {
-            let rectangle = Rectangle(frame: CGRect(x:100 + 200*i, y:100, width: 80, height: 120))
+        for i in 0...3 {
+            let rectangle = Rectangle(frame: CGRect(x:50 + 120*i, y:100, width: 80, height: 120))
             rectangle.everything = self
             addSubview(rectangle)
             rectangles.append(rectangle)
@@ -279,33 +291,11 @@ class Everything: NSView {
         layer!.addSublayer(guidePathsLayer)
         
         
-        // drawGuidePaths()
+        drawGuidePaths()
         needsDisplay = true
     }
     
-    func drawGuidePaths() {
-        CATransaction.begin()
-        CATransaction.setAnimationDuration(0)
-        
-        for vertex in vertexes {
-            let guidePath = CGMutablePath()
-            guidePath.addEllipse(in: NSRect(x: vertex.frame.minX - vertex.frame.width * 1.5, y: vertex.frame.minY + vertex.frame.height * 0.5, width: vertex.frame.width*4, height: vertex.frame.height*4))
-            
-            if vertexesToGuidePathShapeLayers[vertex] == nil {
-                vertexesToGuidePathShapeLayers[vertex] = CAShapeLayer()
-            }
-            let guidePathShapeLayer = vertexesToGuidePathShapeLayers[vertex]!
-            guidePathShapeLayer.frame = self.frame
-            guidePathShapeLayer.strokeColor = NSColor.red.cgColor
-            guidePathShapeLayer.fillRule = .evenOdd
-            guidePathShapeLayer.opacity = 0.5
-            guidePathShapeLayer.lineWidth = 1.0
-            guidePathShapeLayer.path = guidePath
-            
-            guidePathsLayer.addSublayer(guidePathShapeLayer)
-        }
-        CATransaction.commit()
-    }
+
     
     func drawSelectionBox() {
         CATransaction.begin()
@@ -325,7 +315,8 @@ class Everything: NSView {
         }
         selectionShapeLayer!.frame = self.frame
         selectionShapeLayer!.strokeColor = NSColor.blue.cgColor
-        selectionShapeLayer!.opacity = 0.5
+        selectionShapeLayer!.fillColor = NSColor.blue.cgColor
+        selectionShapeLayer!.opacity = 0.2
         selectionShapeLayer!.lineWidth = 1.0
         selectionShapeLayer!.path = selectionBox
         curvesLayer.addSublayer(selectionShapeLayer!)
@@ -358,11 +349,33 @@ class Everything: NSView {
         CATransaction.commit()
     }
     
+    func plotLine(_ start: CGPoint, _ finish: CGPoint) -> CAShapeLayer {
+        let path = CGMutablePath()
+        path.move(to: start)
+        path.addLine(to: finish)
+        
+        let shapeLayer = CAShapeLayer()
+        shapeLayer.frame = self.frame
+        shapeLayer.strokeColor = NSColor.black.cgColor
+        shapeLayer.lineWidth = 1.0
+        shapeLayer.path = path
+        
+        curvesLayer.addSublayer(shapeLayer)
+        return shapeLayer
+    }
+    
     func drawFinishedEdges() {
         CATransaction.begin()
         CATransaction.setAnimationDuration(0)
-        
+        /*
+        curvesLayer.sublayers = nil
         for vertexPair in vertexPairs {
+            let shapeLayer = plotLine(CGPoint(x: NSMidX(vertexPair.start.frame), y: NSMidY(vertexPair.start.frame)),
+                     CGPoint(x: NSMidX(vertexPair.finish.frame), y: NSMidY(vertexPair.finish.frame))
+            )
+            
+            curvesLayer.addSublayer(shapeLayer)
+            /*
             let path = CGMutablePath()
             path.move(to: CGPoint(x: NSMidX(vertexPair.start.frame), y: NSMidY(vertexPair.start.frame)))
             path.addLine(to: CGPoint(x: NSMidX(vertexPair.finish.frame), y: NSMidY(vertexPair.finish.frame)))
@@ -378,8 +391,171 @@ class Everything: NSView {
             shapeLayer.path = path
             
             curvesLayer.addSublayer(shapeLayer)
-        }
+            */
+        }*/
         
+        CATransaction.commit()
+    }
+    
+    func drawGuidePaths() {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0)
+        
+        guidePathsLayer.sublayers = nil
+        for vertexPair in vertexPairs {
+            
+            let startVertex = vertexPair.start
+            let finishVertex = vertexPair.finish
+            
+            let guidePathStart = CGMutablePath()
+            let guidePathFinish = CGMutablePath()
+
+            let smallWidth = startVertex.frame.width
+            let smallHeight = startVertex.frame.height
+            
+            let bigWidth = startVertex.frame.width * 6
+            let bigHeight = startVertex.frame.height * 6
+            
+            let startX = startVertex.frame.minX - bigWidth/2 + smallWidth/2
+            let finishX = finishVertex.frame.minX - bigWidth/2 + smallWidth/2
+            
+            var startY = CGFloat()
+            var finishY = CGFloat()
+            
+            if startVertex.frame.minY > finishVertex.frame.minY {
+                startY = startVertex.frame.minY + smallHeight/2 - bigHeight
+                finishY = finishVertex.frame.minY + smallHeight/2
+            } else {
+                startY = startVertex.frame.minY + smallHeight/2
+                finishY = finishVertex.frame.minY + smallHeight/2 - bigHeight
+            }
+
+            let startRect = NSRect(x: startX, y: startY, width: bigWidth, height: bigHeight)
+            let finishRect = NSRect(x: finishX, y: finishY, width: bigWidth, height: bigHeight)
+            
+            let startCenter = startRect.center
+            let finishCenter = finishRect.center
+            
+            func CGPointDistanceSquared(from: CGPoint, to: CGPoint) -> CGFloat {
+                return (from.x - to.x) * (from.x - to.x) + (from.y - to.y) * (from.y - to.y)
+            }
+
+            func CGPointDistance(from: CGPoint, to: CGPoint) -> CGFloat {
+                return sqrt(CGPointDistanceSquared(from: from, to: to))
+            }
+            
+            let radius = bigWidth/2
+        
+            /*
+            let phi1 = 1.0 / sin(2*radius / CGPointDistance(from: startCenter, to: finishCenter))
+            let phi2 = atan2(finishCenter.y - startCenter.y, finishCenter.x - startCenter.x)
+            let phi3 = -1 * phi1 + phi2 - CGFloat.pi/2
+            
+            let xt1 = startCenter.x + radius * cos(phi3)
+            let yt1 = startCenter.y + radius * sin(phi3)
+            
+            let xt2 = finishCenter.x + radius * cos(phi3 + CGFloat.pi)
+            let yt2 = finishCenter.y + radius * sin(phi3 + CGFloat.pi)
+ 
+ */
+            
+            let dist = CGPointDistance(from: startCenter, to: finishCenter)
+            let alpha = acos(2 * radius / dist)
+            var beta = acos((finishCenter.x - startCenter.x)/dist)
+            let noFlipBeta = beta
+            
+            
+            if startCenter.y >= finishCenter.y {
+                beta *= -1.0
+            }
+
+            
+            var offset: CGFloat
+            if startVertex.frame.minY > finishVertex.frame.minY {
+                offset = alpha - beta
+            } else {
+                offset = -1 * (beta + alpha)
+            }
+            
+            let xt1 = startCenter.x + radius * cos(offset)
+            let yt1 = startCenter.y - radius * sin(offset)
+            
+            let xt2 = finishCenter.x - radius * cos(offset)
+            let yt2 = finishCenter.y + radius * sin(offset)
+            
+
+            
+            func plotPoint(_ x: CGFloat, _ y: CGFloat) {
+                NSLog("plotpoint: \(x), \(y)")
+                let shapeLayer = CAShapeLayer()
+                shapeLayer.frame = self.frame
+                shapeLayer.strokeColor = NSColor.black.cgColor
+                shapeLayer.lineWidth = 1.0
+                let path = CGMutablePath()
+                path.addEllipse(in: NSRect(x: x, y: y, width: 2, height: 2))
+                shapeLayer.path = path
+                guidePathsLayer.addSublayer(shapeLayer)
+            }
+            /*
+            plotPoint(startX, startY)
+            plotPoint(finishX, finishY)
+            
+            plotPoint(startCenter.x, startCenter.y)
+            plotPoint(finishCenter.x, finishCenter.y)
+            */
+            let shapeLayer = plotLine(
+                CGPoint(x: xt1, y: yt1),
+                CGPoint(x: xt2, y: yt2)
+            )
+            guidePathsLayer.addSublayer(shapeLayer)
+            
+            
+
+            var noFlipOffset: CGFloat
+            if startVertex.frame.minY > finishVertex.frame.minY {
+                noFlipOffset = alpha - beta
+            } else {
+                noFlipOffset = -1 * (beta + alpha)
+            }
+            
+            if startCenter.y > finishCenter.y {
+                noFlipOffset -= 4*CGFloat.pi/2
+            }
+            
+            
+            // guidePathStart.addEllipse(in: startRect.insetBy(dx: startRect.width*2, dy: startRect.height*2))
+            if startVertex.frame.minY < finishVertex.frame.minY {
+                guidePathStart.addArc(center: startCenter, radius: radius, startAngle:   3*CGFloat.pi/2, endAngle: abs(noFlipOffset), clockwise: true)
+                guidePathFinish.addArc(center: finishCenter, radius: radius, startAngle:   CGFloat.pi/2, endAngle: abs(noFlipOffset) + CGFloat.pi, clockwise: true)
+            } else {
+                guidePathStart.addArc(center: startCenter, radius: radius, startAngle:     CGFloat.pi/2, endAngle: 0*CGFloat.pi/2 + abs(noFlipOffset), clockwise: false)
+                guidePathFinish.addArc(center: finishCenter, radius: radius, startAngle: 3*CGFloat.pi/2, endAngle: 2*CGFloat.pi/2 + abs(noFlipOffset), clockwise: false)
+            }
+
+
+            func plot(path: CGMutablePath, color: CGColor) -> CAShapeLayer {
+                let shapeLayer = CAShapeLayer()
+                shapeLayer.frame = self.frame
+                shapeLayer.strokeColor = color
+                shapeLayer.fillColor = nil
+                shapeLayer.lineWidth = 1.0
+                shapeLayer.path = path
+                return shapeLayer
+            }
+            
+            
+            let startCircle = CGMutablePath()
+            startCircle.addEllipse(in: startRect)
+            
+            let finishCircle = CGMutablePath()
+            finishCircle.addEllipse(in: finishRect)
+
+            //guidePathsLayer.addSublayer(plot(path: startCircle, color: NSColor.lightGray.cgColor))
+            //guidePathsLayer.addSublayer(plot(path: finishCircle, color: NSColor.lightGray.cgColor))
+
+            guidePathsLayer.addSublayer(plot(path: guidePathStart, color: NSColor.black.cgColor))
+            guidePathsLayer.addSublayer(plot(path: guidePathFinish, color: NSColor.black.cgColor))
+        }
         CATransaction.commit()
     }
 }
