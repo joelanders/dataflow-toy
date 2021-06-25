@@ -39,9 +39,10 @@ class Vertex: NSView {
     override func draw(_ dirtyRect: CGRect) {
         super.draw(dirtyRect)
 
-        NSColor.lightGray.set()
-        circlePath.lineWidth = 5.0
-        circlePath.appendOval(in: CGRect(x:2.5, y:2.5, width: 5, height:5))
+        NSColor.black.set()
+        circlePath.lineWidth = 1.0
+        circlePath.appendOval(in: CGRect(x:2.5, y:2.5, width: 5.0, height:5.0))
+        circlePath.fill()
         circlePath.stroke()
 
         rectangle?.everything?.needsDisplay = true
@@ -92,6 +93,8 @@ class Rectangle: NSView {
         } else {
             NSColor.gray.set()
         }
+        
+        self.layer?.cornerRadius = 5.0
         NSBezierPath(rect: dirtyRect).fill()
         
         NSColor.lightGray.set()
